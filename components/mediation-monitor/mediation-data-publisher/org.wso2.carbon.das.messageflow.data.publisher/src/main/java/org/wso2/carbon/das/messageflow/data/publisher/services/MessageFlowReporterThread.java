@@ -89,7 +89,7 @@ public class MessageFlowReporterThread extends Thread {
         while (!shutdownRequested) {
             try {
                 statisticsReportingEventHolder = synapseEnvironmentService.getSynapseEnvironment().getMessageDataStore().dequeue();
-                if (statisticsReportingEventHolder != null) {
+                if (statisticsReportingEventHolder != null && statisticsReportingEventHolder.isPublishEIAnalytics()) {
 
 //                    log.info("******* event list size - " + statisticsReportingEventHolder.getQueueSize() + " holder " +
 //                            "count - " + statisticsReportingEventHolder.countHolder.getStatCount() + " callback - " + statisticsReportingEventHolder.countHolder.getCallBackCount());
