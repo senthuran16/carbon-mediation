@@ -37,6 +37,7 @@ import org.apache.axiom.soap.SOAPEnvelope;
 import org.apache.axiom.soap.SOAPFactory;
 import org.apache.axiom.util.UIDGenerator;
 import org.apache.axis2.AxisFault;
+import org.apache.axis2.Constants;
 import org.apache.axis2.builder.Builder;
 import org.apache.axis2.builder.BuilderUtil;
 import org.apache.axis2.builder.SOAPBuilder;
@@ -49,12 +50,17 @@ import org.apache.commons.io.input.AutoCloseInputStream;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.SynapseException;
+import org.apache.synapse.api.inbound.InboundAPIHandler;
+import org.apache.synapse.config.SynapseConfiguration;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.core.axis2.MessageContextCreatorForAxis2;
 import org.apache.synapse.inbound.InboundEndpoint;
 import org.apache.synapse.inbound.InboundEndpointConstants;
 import org.apache.synapse.mediators.MediatorFaultHandler;
 import org.apache.synapse.mediators.base.SequenceMediator;
+import org.apache.synapse.rest.API;
+import org.apache.synapse.rest.RESTRequestHandler;
+import org.apache.synapse.rest.RESTUtils;
 import org.apache.synapse.transport.customlogsetter.CustomLogSetter;
 import org.apache.log4j.Logger;
 import org.wso2.carbon.core.multitenancy.utils.TenantAxisUtils;
@@ -70,6 +76,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -97,6 +104,11 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
     private ArrayList<AbstractSubprotocolHandler> subprotocolHandlers;
     private String defaultContentType;
     private int portOffset;
+
+
+    private boolean dispatchToApi = false;
+    private RESTRequestHandler restHandler = new RESTRequestHandler();
+    private InboundAPIHandler inboundAPIHandler = new InboundAPIHandler();
 
     static {
         contentTypes.add("application/xml");
@@ -507,7 +519,17 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
                     .setProperty(InboundWebsocketConstants.WEBSOCKET_OUTFLOW_DISPATCH_FAULT_SEQUENCE, outflowErrorSequence);
         }
         synCtx.setProperty(InboundWebsocketConstants.WEBSOCKET_SUBSCRIBER_PATH, subscriberPath.toString());
+        synCtx.setProperty("websocket.subscriber.topic", getWebsocketSubscriberTopic(subscriberPath.toString()));
         return synCtx;
+    }
+
+    private String getWebsocketSubscriberTopic(String subscriberPath) { // getStreamingApiTopic
+        // TODO Note: [0]=_PRODUCTION [1]=chats [2]=1.0.0 [3onwards]=topicPath // Beware: _PRODUCTION_ is removed with 'mediateThrougApi'
+        String[] segments = subscriberPath.split("/");
+        if (segments.length < 4) {
+            return "/";
+        }
+        return "/" + String.join("/", Arrays.copyOfRange(segments, 4, segments.length));
     }
 
     private static org.apache.synapse.MessageContext createSynapseMessageContext(String tenantDomain) throws AxisFault {
@@ -560,13 +582,34 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
             log.debug("injecting message to sequence : " + endpoint.getInjectingSeq());
         }
         synCtx.setProperty("inbound.endpoint.name", endpoint.getName());
-        if (dispatchToCustomSequence) {
-            String context = (subscriberPath.getPath()).substring(1);
-            context = context.replace('/', '-');
-            if (synCtx.getConfiguration().getDefinedSequences().containsKey(context))
-                injectingSequence = (SequenceMediator) synCtx.getSequence(context);
+
+        try {
+            org.apache.axis2.context.MessageContext msgCtx = ((Axis2MessageContext)synCtx).getAxis2MessageContext();
+            msgCtx.setIncomingTransportName(new URI(handshaker.uri()).getScheme());
+            msgCtx.setProperty(Constants.Configuration.TRANSPORT_IN_URL, handshaker.uri());
+
+            // TODO move this dispatching logic to the engine
+            boolean result = inboundAPIHandler.process(synCtx); // TODO call this inboundHandler in HTTP as well
+            log.info("Suspect: " + result);
+
+        } catch (URISyntaxException e) {
+            log.error("Invalid URI scheme: " + handshaker.uri());
+            throw new SynapseException(e);
         }
-        synCtx.getEnvironment().injectMessage(synCtx, injectingSequence);
+
+
+//        if (true) {
+//            synCtx.setProperty("HTTP_METHOD", "POST");
+//            restHandler.process(synCtx); 
+//        } else { // TODO synapse sequence is decided here
+////            RESTUtils.getFullRequestPath(synCtx);
+//            String context = (subscriberPath.getPath()).substring(1);
+//            context = context.replace('/', '-');
+//            String streamingApiContext = getStreamingApiContext(context);
+//            if (synCtx.getConfiguration().getDefinedSequences().containsKey(streamingApiContext))
+//                injectingSequence = (SequenceMediator) synCtx.getSequence(streamingApiContext);
+//            synCtx.getEnvironment().injectMessage(synCtx, injectingSequence);
+//        }
     }
 
     private SequenceMediator getFaultSequence(org.apache.synapse.MessageContext synCtx,
