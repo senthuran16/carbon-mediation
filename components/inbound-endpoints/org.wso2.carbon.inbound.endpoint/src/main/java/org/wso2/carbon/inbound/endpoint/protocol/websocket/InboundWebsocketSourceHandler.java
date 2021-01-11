@@ -37,7 +37,6 @@ import org.apache.axiom.soap.SOAPEnvelope;
 import org.apache.axiom.soap.SOAPFactory;
 import org.apache.axiom.util.UIDGenerator;
 import org.apache.axis2.AxisFault;
-import org.apache.axis2.Constants;
 import org.apache.axis2.builder.Builder;
 import org.apache.axis2.builder.BuilderUtil;
 import org.apache.axis2.builder.SOAPBuilder;
@@ -57,7 +56,6 @@ import org.apache.synapse.inbound.InboundEndpoint;
 import org.apache.synapse.inbound.InboundEndpointConstants;
 import org.apache.synapse.mediators.MediatorFaultHandler;
 import org.apache.synapse.mediators.base.SequenceMediator;
-import org.apache.synapse.rest.RESTRequestHandler;
 import org.apache.synapse.transport.customlogsetter.CustomLogSetter;
 import org.apache.log4j.Logger;
 import org.wso2.carbon.core.multitenancy.utils.TenantAxisUtils;
@@ -73,7 +71,6 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
@@ -101,7 +98,6 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
     private ArrayList<AbstractSubprotocolHandler> subprotocolHandlers;
     private String defaultContentType;
     private int portOffset;
-
 
     private InboundApiHandler inboundApiHandler = new InboundApiHandler();
 
@@ -568,33 +564,25 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
         }
         synCtx.setProperty("inbound.endpoint.name", endpoint.getName());
 
+        boolean isProcessed;
         try {
             org.apache.axis2.context.MessageContext msgCtx = ((Axis2MessageContext)synCtx).getAxis2MessageContext();
             msgCtx.setIncomingTransportName(new URI(handshaker.uri()).getScheme());
-            msgCtx.setProperty(Constants.Configuration.TRANSPORT_IN_URL, handshaker.uri());
-
-            // TODO move this dispatching logic to the engine
-            boolean result = inboundApiHandler.process(synCtx); // TODO call this inboundHandler in HTTP as well
-            log.info("Suspect: " + result);
-
+            isProcessed = inboundApiHandler.process(synCtx);
         } catch (URISyntaxException e) {
-            log.error("Invalid URI scheme: " + handshaker.uri());
+            log.error("Invalid URI: " + handshaker.uri());
             throw new SynapseException(e);
         }
 
-
-//        if (true) {
-//            synCtx.setProperty("HTTP_METHOD", "POST");
-//            restHandler.process(synCtx); 
-//        } else { // TODO synapse sequence is decided here
-////            RESTUtils.getFullRequestPath(synCtx);
-//            String context = (subscriberPath.getPath()).substring(1);
-//            context = context.replace('/', '-');
-//            String streamingApiContext = getStreamingApiContext(context);
-//            if (synCtx.getConfiguration().getDefinedSequences().containsKey(streamingApiContext))
-//                injectingSequence = (SequenceMediator) synCtx.getSequence(streamingApiContext);
-//            synCtx.getEnvironment().injectMessage(synCtx, injectingSequence);
-//        }
+        if (!isProcessed) {
+            if (dispatchToCustomSequence) {
+                String context = (subscriberPath.getPath()).substring(1);
+                context = context.replace('/', '-');
+                if (synCtx.getConfiguration().getDefinedSequences().containsKey(context))
+                    injectingSequence = (SequenceMediator) synCtx.getSequence(context);
+            }
+            synCtx.getEnvironment().injectMessage(synCtx, injectingSequence);
+        }
     }
 
     private SequenceMediator getFaultSequence(org.apache.synapse.MessageContext synCtx,
