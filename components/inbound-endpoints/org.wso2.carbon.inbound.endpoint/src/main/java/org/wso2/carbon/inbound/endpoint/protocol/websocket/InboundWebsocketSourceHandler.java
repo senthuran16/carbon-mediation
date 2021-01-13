@@ -37,6 +37,7 @@ import org.apache.axiom.soap.SOAPEnvelope;
 import org.apache.axiom.soap.SOAPFactory;
 import org.apache.axiom.util.UIDGenerator;
 import org.apache.axis2.AxisFault;
+import org.apache.axis2.Constants;
 import org.apache.axis2.builder.Builder;
 import org.apache.axis2.builder.BuilderUtil;
 import org.apache.axis2.builder.SOAPBuilder;
@@ -49,6 +50,7 @@ import org.apache.commons.io.input.AutoCloseInputStream;
 import org.apache.synapse.MessageContext;
 import org.apache.synapse.SynapseConstants;
 import org.apache.synapse.SynapseException;
+import org.apache.synapse.api.ApiConstants;
 import org.apache.synapse.api.inbound.InboundApiHandler;
 import org.apache.synapse.core.axis2.Axis2MessageContext;
 import org.apache.synapse.core.axis2.MessageContextCreatorForAxis2;
@@ -563,11 +565,13 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
             log.debug("injecting message to sequence : " + endpoint.getInjectingSeq());
         }
         synCtx.setProperty("inbound.endpoint.name", endpoint.getName());
+        synCtx.setProperty(ApiConstants.API_CALLER, endpoint.getName());
 
         boolean isProcessed;
         try {
             org.apache.axis2.context.MessageContext msgCtx = ((Axis2MessageContext)synCtx).getAxis2MessageContext();
             msgCtx.setIncomingTransportName(new URI(handshaker.uri()).getScheme());
+            msgCtx.setProperty(Constants.Configuration.TRANSPORT_IN_URL, handshaker.uri());
             isProcessed = inboundApiHandler.process(synCtx);
         } catch (URISyntaxException e) {
             log.error("Invalid URI: " + handshaker.uri());
