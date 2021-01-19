@@ -158,7 +158,7 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
                 InboundWebsocketConstants.CONNECTION_TERMINATE, new Boolean(true));
         ((Axis2MessageContext)synCtx).getAxis2MessageContext().setProperty(InboundWebsocketConstants.CLIENT_ID,
                 ctx.channel().hashCode());
-        injectToSequence(synCtx, endpoint);
+        injectForMediation(synCtx, endpoint);
     }
 
     private void handleHandshake(ChannelHandlerContext ctx, FullHttpRequest req) throws URISyntaxException, AxisFault {
@@ -224,7 +224,7 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
                 InboundWebsocketConstants.WEBSOCKET_SOURCE_HANDSHAKE_PRESENT, new Boolean(true));
         ((Axis2MessageContext)synCtx).getAxis2MessageContext().setProperty(InboundWebsocketConstants.CLIENT_ID,
                 ctx.channel().hashCode());
-        injectToSequence(synCtx, endpoint);
+        injectForMediation(synCtx, endpoint);
 
     }
 
@@ -310,7 +310,7 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
                         OMElement documentElement = builder.processDocument(in, contentType, axis2MsgCtx);
                         synCtx.setEnvelope(TransportUtils.createSOAPEnvelope(documentElement));
                     }
-                    injectToSequence(synCtx, endpoint);
+                    injectForMediation(synCtx, endpoint);
                     return;
                 } else if ((frame instanceof TextWebSocketFrame) && ((handshaker.selectedSubprotocol() == null) ||
                         (handshaker.selectedSubprotocol() != null
@@ -337,7 +337,7 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
                         OMElement documentElement = builder.processDocument(in, contentType, axis2MsgCtx);
                         synCtx.setEnvelope(TransportUtils.createSOAPEnvelope(documentElement));
                     }
-                    injectToSequence(synCtx, endpoint);
+                    injectForMediation(synCtx, endpoint);
                     return;
                 } else if ((frame instanceof TextWebSocketFrame) && handshaker.selectedSubprotocol() != null
                         && handshaker.selectedSubprotocol().contains(
@@ -380,7 +380,7 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
                     InputStream in = new AutoCloseInputStream(new ByteArrayInputStream(message.getBytes()));
                     documentElement = builder.processDocument(in, contentType, axis2MsgCtx);
                     synCtx.setEnvelope(TransportUtils.createSOAPEnvelope(documentElement));
-                    injectToSequence(synCtx, endpoint);
+                    injectForMediation(synCtx, endpoint);
                 } else if (frame instanceof PingWebSocketFrame) {
                     ctx.channel().writeAndFlush(new PongWebSocketFrame(frame.content().retain()));
                     PongWebSocketFrame pongWebSocketFrame = new PongWebSocketFrame(frame.content().retain());
@@ -549,15 +549,8 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
         return axis2MsgCtx;
     }
 
-    private void injectToSequence(org.apache.synapse.MessageContext synCtx,
-                                  InboundEndpoint endpoint) {
-        SequenceMediator injectingSequence = null;
-        if (endpoint.getInjectingSeq() != null) {
-            injectingSequence = (SequenceMediator) synCtx.getSequence(endpoint.getInjectingSeq());
-        }
-        if (injectingSequence == null) {
-            injectingSequence = (SequenceMediator) synCtx.getMainSequence();
-        }
+    private void injectForMediation(org.apache.synapse.MessageContext synCtx,
+                                    InboundEndpoint endpoint) {
         SequenceMediator faultSequence = getFaultSequence(synCtx, endpoint);
         MediatorFaultHandler mediatorFaultHandler = new MediatorFaultHandler(faultSequence);
         synCtx.pushFaultHandler(mediatorFaultHandler);
@@ -579,6 +572,13 @@ public class InboundWebsocketSourceHandler extends ChannelInboundHandlerAdapter 
         }
 
         if (!isProcessed) {
+            SequenceMediator injectingSequence = null;
+            if (endpoint.getInjectingSeq() != null) {
+                injectingSequence = (SequenceMediator) synCtx.getSequence(endpoint.getInjectingSeq());
+            }
+            if (injectingSequence == null) {
+                injectingSequence = (SequenceMediator) synCtx.getMainSequence();
+            }
             if (dispatchToCustomSequence) {
                 String context = (subscriberPath.getPath()).substring(1);
                 context = context.replace('/', '-');
