@@ -22,6 +22,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.websocketx.BinaryWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
+import io.netty.util.ReferenceCountUtil;
 import org.apache.axiom.om.OMOutputFormat;
 import org.apache.axis2.AxisFault;
 import org.apache.axis2.context.ConfigurationContext;
@@ -190,7 +191,12 @@ public class WebsocketTransportSender extends AbstractTransportSender {
                             + clientHandler.getChannelHandlerContext().channel().toString());
                 }
                 if (clientHandler.getChannelHandlerContext().channel().isActive()) {
-                    clientHandler.getChannelHandlerContext().channel().writeAndFlush(frame.retain());
+//                    clientHandler.getChannelHandlerContext().channel().writeAndFlush(frame.retain());
+                    try {
+                        clientHandler.getChannelHandlerContext().channel().writeAndFlush(frame.retain()); // TODO above frame types?
+                    } finally {
+                        ReferenceCountUtil.release(frame);
+                    }
                     if (log.isDebugEnabled()) {
                         LogUtil.printWebSocketFrame(log, frame, clientHandler.getChannelHandlerContext(), false);
                     }
